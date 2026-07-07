@@ -1,0 +1,21 @@
+name: Nightly MongoDB Backup to S3
+
+on:
+  schedule:
+    # 3:00 AM UTC every day. Adjust to your timezone as needed.
+    - cron: '0 3 * * *'
+  workflow_dispatch: {}
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run backup script on EC2
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+          script: |
+            cd ${{ secrets.EC2_APP_PATH }}
+            docker compose exec -T backend node scripts/backupToS3.js

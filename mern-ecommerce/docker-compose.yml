@@ -1,0 +1,46 @@
+version: '3.9'
+
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    volumes:
+      - mongo_data:/data/db
+    # Not exposed to the host on purpose — only reachable by other containers on this network.
+    networks:
+      - app_network
+
+  backend:
+    build:
+      context: ./backend
+    image: mern-ecommerce-backend:latest
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    environment:
+      - MONGO_URI=mongodb://mongo:27017/mern_ecommerce
+    depends_on:
+      - mongo
+    networks:
+      - app_network
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: /api
+    image: mern-ecommerce-frontend:latest
+    restart: unless-stopped
+    ports:
+      - '8081:80'
+    depends_on:
+      - backend
+    networks:
+      - app_network
+
+volumes:
+  mongo_data:
+
+networks:
+  app_network:
+    driver: bridge

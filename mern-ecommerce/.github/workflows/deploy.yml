@@ -1,0 +1,86 @@
+name: Deploy MERN E-commerce to EC2
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+jobs:
+  build-and-test:
+    name: Install & sanity-check both apps
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install backend dependencies
+        working-directory: ./backend
+        run: npm ci
+
+      - name: Install frontend dependencies
+        working-directory: ./frontend
+        run: npm ci
+
+      - name: Build frontend (fails the pipeline on build errors)
+        working-directory: ./frontend
+        run: npm run build
+        env:
+          VITE_API_URL: /api
+
+  deploy:
+    name: Deploy to EC2
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    # Only deploy on pushes to main, not on manual re-runs of a PR build
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Copy project to EC2 via rsync over SSH
+        uses: burnett01/rsync-deployments@7.0.1
+        with:
+          switches: -avzr --delete --exclude='.git*' --exclude='node_modules' --exclude='dist'
+          path: ./
+          remote_path: ${{ secrets.EC2_APP_PATH }}
+          remote_host: ${{ secrets.EC2_HOST }}
+          remote_user: ${{ secrets.EC2_USER }}
+          remote_key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+
+      - name: Write backend .env on the server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+          script: |
+            cat > ${{ secrets.EC2_APP_PATH }}/backend/.env <<'EOF'
+            NODE_ENV=production
+            PORT=5000
+            CLIENT_URL=${{ secrets.CLIENT_URL }}
+            MONGO_URI=mongodb://mongo:27017/mern_ecommerce
+            JWT_SECRET=${{ secrets.JWT_SECRET }}
+            JWT_EXPIRES_IN=30d
+            COOKIE_EXPIRES_DAYS=30
+            STRIPE_SECRET_KEY=${{ secrets.STRIPE_SECRET_KEY }}
+            AWS_REGION=${{ secrets.AWS_REGION }}
+            S3_BACKUP_BUCKET=${{ secrets.S3_BACKUP_BUCKET }}
+            ADMIN_EMAIL=${{ secrets.ADMIN_EMAIL }}
+            ADMIN_PASSWORD=${{ secrets.ADMIN_PASSWORD }}
+            EOF
+
+      - name: Build and restart containers on EC2
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+          script: |
+            cd ${{ secrets.EC2_APP_PATH }}
+            docker compose pull --ignore-pull-failures || true
+            docker compose build
+            docker compose up -d
+            docker image prune -f
