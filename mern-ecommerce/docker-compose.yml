@@ -32,7 +32,7 @@ services:
     image: mern-ecommerce-frontend:latest
     restart: unless-stopped
     ports:
-      - '8081:80'
+      - '8082:80'
     depends_on:
       - backend
     networks:
