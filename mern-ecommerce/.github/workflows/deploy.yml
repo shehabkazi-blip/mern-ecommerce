@@ -1,5 +1,5 @@
 name: Deploy MERN E-commerce to EC2
-
+# Triggering deployment test
 on:
   push:
     branches: [main]
