@@ -1,5 +1,5 @@
 name: Deploy MERN E-commerce to EC2
-# Triggering deployment test
+
 on:
   push:
     branches: [main]
@@ -25,7 +25,7 @@ jobs:
         working-directory: ./frontend
         run: npm ci
 
-      - name: Build frontend (fails the pipeline on build errors)
+      - name: Build frontend
         working-directory: ./frontend
         run: npm run build
         env:
@@ -35,12 +35,11 @@ jobs:
     name: Deploy to EC2
     needs: build-and-test
     runs-on: ubuntu-latest
-    # Only deploy on pushes to main, not on manual re-runs of a PR build
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     steps:
       - uses: actions/checkout@v4
 
-      - name: Copy project to EC2 via rsync over SSH
+      - name: Copy project to EC2
         uses: burnett01/rsync-deployments@7.0.1
         with:
           switches: -avzr --delete --exclude='.git*' --exclude='node_modules' --exclude='dist'
@@ -50,7 +49,7 @@ jobs:
           remote_user: ${{ secrets.EC2_USER }}
           remote_key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
 
-      - name: Write backend .env on the server
+      - name: Write backend .env
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.EC2_HOST }}
@@ -71,8 +70,9 @@ jobs:
             ADMIN_EMAIL=${{ secrets.ADMIN_EMAIL }}
             ADMIN_PASSWORD=${{ secrets.ADMIN_PASSWORD }}
             EOF
+            chmod 600 ${{ secrets.EC2_APP_PATH }}/backend/.env
 
-      - name: Build and restart containers on EC2
+      - name: Build and restart containers
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.EC2_HOST }}
